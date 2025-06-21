@@ -1,11 +1,14 @@
 // Define the pins for buttons and outputs
-const int BUTTON1_PIN = 2;
-const int BUTTON2_PIN = 3;
-const int OUTPUT1_PIN = 4;
-const int OUTPUT2_PIN = 5;
+const int BUTTON1_PIN = A2; // Using Analog Pin A2 for Button 1
+const int BUTTON2_PIN = A1; // Using Analog Pin A1 for Button 2
+const int OUTPUT1_PIN = 0;
+const int OUTPUT2_PIN = 1;
 
 // Debounce parameters
 const unsigned long DEBOUNCE_DELAY_MS = 50; // milliseconds
+
+// Analog read threshold
+const int ANALOG_THRESHOLD = 256; // Values above this are considered HIGH (pressed)
 
 // Button 1 state variables for debouncing
 int debouncedButton1State = LOW;     // Current debounced state of button 1 (HIGH when pressed)
@@ -38,10 +41,10 @@ void setup() {
   // Serial.println("System Initialized");
 
   // Initialize button pins as inputs.
-  // IMPORTANT: This code assumes buttons are wired with external pull-DOWN resistors.
+  // IMPORTANT: This code assumes buttons are wired with external pull-DOWN resistors to an ANALOG pin.
   // When a button is pressed, it connects VCC to the input pin (making it HIGH).
   // When not pressed, the pull-down resistor pulls the pin LOW. (This is correct)
-  // Example wiring: VCC --- Button --- PinX
+  // Example wiring: VCC --- Button --- PinAX (e.g., A0)
   //                               |
   //                             10k Ohm Resistor (Pull-down)
   //                               |
@@ -60,16 +63,22 @@ void setup() {
   output2LedState = LOW;
 
   // Initialize button debouncing states based on initial readings
-  lastButton1Reading = digitalRead(BUTTON1_PIN);
+  lastButton1Reading = readAnalogButton(BUTTON1_PIN);
   debouncedButton1State = lastButton1Reading;
-  lastButton2Reading = digitalRead(BUTTON2_PIN);
+  lastButton2Reading = readAnalogButton(BUTTON2_PIN);
   debouncedButton2State = lastButton2Reading;
 
   currentState = IDLE; // Set initial system state
   // Serial.println("Initial State: IDLE");
 }
 
-// Helper function for debouncing a button and detecting a press event (rising edge)
+// Helper function to read an analog pin and convert to a digital state (HIGH/LOW)
+// This abstracts the analog reading logic.
+int readAnalogButton(int pin) {
+  return (analogRead(pin) > ANALOG_THRESHOLD) ? HIGH : LOW;
+}
+
+// Helper function for debouncing a button and detecting a press event (rising edge).
 // pin: The button pin number
 // lastReading: Pointer to the variable storing the last raw reading of the button
 // debouncedState: Pointer to the variable storing the current debounced state of the button
@@ -78,7 +87,7 @@ void setup() {
 bool checkButtonPressed(int pin, int &currentLastReading, int &currentDebouncedState, unsigned long &currentLastDebounceTime) {
   unsigned long currentTime = millis();
   bool pressEvent = false;
-  int reading = digitalRead(pin);
+  int reading = readAnalogButton(pin);
 
   if (reading != currentLastReading) {
     currentLastDebounceTime = currentTime;
