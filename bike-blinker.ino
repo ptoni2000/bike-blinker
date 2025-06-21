@@ -31,7 +31,8 @@ const unsigned long BLINK_INTERVAL_MS = 500; // Blink interval (half-period: 500
 enum SystemState {
   IDLE,
   BLINKING_OUTPUT1,
-  BLINKING_OUTPUT2
+  BLINKING_OUTPUT2,
+  HAZARD
 };
 SystemState currentState = IDLE; // Initial state
 
@@ -44,11 +45,11 @@ void setup() {
   // IMPORTANT: This code assumes buttons are wired with external pull-DOWN resistors to an ANALOG pin.
   // When a button is pressed, it connects VCC to the input pin (making it HIGH).
   // When not pressed, the pull-down resistor pulls the pin LOW. (This is correct)
-  // Example wiring: VCC --- Button --- PinAX (e.g., A0)
-  //                               |
-  //                             10k Ohm Resistor (Pull-down)
-  //                               |
-  //                              GND
+  // Example wiring: VCC --- Button --- 4k7---+ PinAX (e.g., A0)
+  //                                          |
+  //                                         1k Ohm Resistor (Pull-down)
+  //                                          |
+  //                                         GND
   pinMode(BUTTON1_PIN, INPUT);
   pinMode(BUTTON2_PIN, INPUT);
 
@@ -113,7 +114,28 @@ void loop() {
   bool button2PressedEvent = checkButtonPressed(BUTTON2_PIN, lastButton2Reading, debouncedButton2State, lastDebounceTimeButton2);
 
   // --- State Transition Logic ---
-  if (button1PressedEvent) {
+
+  // Check for a "hazard" event first (one button pressed while the other is already held down).
+  // This is a more reliable way to detect a "both buttons" press than checking for simultaneous press events.
+  bool hazardEvent = (button1PressedEvent && debouncedButton2State == HIGH) || (button2PressedEvent && debouncedButton1State == HIGH);
+
+  if (hazardEvent) {
+    if (currentState != HAZARD) {
+      currentState = HAZARD;
+      // Start blinking with LEDs ON for immediate feedback
+      output1LedState = HIGH;
+      output2LedState = HIGH;
+      digitalWrite(OUTPUT1_PIN, output1LedState);
+      digitalWrite(OUTPUT2_PIN, output2LedState);
+      // Use one timer for both hazard lights
+      lastBlinkTimeOutput1 = currentTime;
+      // Serial.println("  Transition to HAZARD");
+    } else {
+      // If already in HAZARD, a simultaneous press will turn it off.
+      currentState = IDLE;
+      // Serial.println("  Transition to IDLE from HAZARD");
+    }
+  } else if (button1PressedEvent) {
     // Serial.print("Button 1 Pressed Event. Current State: "); Serial.println(currentState);
     switch (currentState) {
       case IDLE:
@@ -125,6 +147,7 @@ void loop() {
         break;
       case BLINKING_OUTPUT1:
       case BLINKING_OUTPUT2:
+      case HAZARD: // A single press also cancels hazard mode
         currentState = IDLE;
         // Serial.println("  Transition to IDLE");
         break;
@@ -141,6 +164,7 @@ void loop() {
         break;
       case BLINKING_OUTPUT1:
       case BLINKING_OUTPUT2:
+      case HAZARD: // A single press also cancels hazard mode
         currentState = IDLE;
         // Serial.println("  Transition to IDLE");
         break;
@@ -192,6 +216,19 @@ void loop() {
         output2LedState = !output2LedState; // Toggle
         digitalWrite(OUTPUT2_PIN, output2LedState);
         // Serial.print("BLINKING_OUTPUT2: Output 2 Toggled to "); Serial.println(output2LedState);
+      }
+      break;
+
+    case HAZARD:
+      // Blink both outputs simultaneously using one timer
+      if (currentTime - lastBlinkTimeOutput1 >= BLINK_INTERVAL_MS) {
+        lastBlinkTimeOutput1 = currentTime;
+        // Toggle both LED states
+        output1LedState = !output1LedState;
+        output2LedState = output1LedState; // Keep them in sync
+        digitalWrite(OUTPUT1_PIN, output1LedState);
+        digitalWrite(OUTPUT2_PIN, output2LedState);
+        // Serial.print("HAZARD: Outputs Toggled to "); Serial.println(output1LedState);
       }
       break;
   }
